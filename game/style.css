@@ -99,3 +99,96 @@ body {
 .big-score span { color: #ffb347; }
 .new-best { color: #37c8ab; font-weight: 700; }
 .hint { color: #b9aed6; font-size: 14px; margin-top: 14px; }
+
+/* v2: objective banner (WIN/LOSE, always in play), wave banner (incoming
+   preview), boss bar, pollen/moon chips, pollen shop, judge note. */
+#objective-bar {
+  position: absolute;
+  top: 44px; left: 0; right: 0;
+  text-align: center;
+  font-size: 13px;
+  color: #ffe9a8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 2;
+}
+#wave-banner {
+  position: absolute;
+  top: 150px; left: 0; right: 0;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+}
+#wave-banner.hidden, #boss-bar.hidden { display: none; }
+#wave-text {
+  display: inline-block;
+  font-size: 16px; font-weight: 700;
+  color: #241a3d;
+  background: rgba(255, 179, 71, 0.92);
+  border-radius: 8px;
+  padding: 8px 16px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}
+#boss-bar {
+  position: absolute;
+  top: 76px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(46, 16, 64, 0.85);
+  border: 1px solid rgba(255, 46, 46, 0.6);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 15px;
+  z-index: 2;
+  pointer-events: none;
+}
+#boss-name { color: #ff5d5d; font-weight: 700; letter-spacing: 1px; }
+#boss-hits { color: #ff2e2e; font-size: 17px; letter-spacing: 2px; }
+.boss-hint { color: #cfc6e8; font-size: 12px; }
+.pollen-bank { color: #ffe9a8; font-weight: 700; }
+.moon-chip { color: #f6ead2; font-weight: 700; }
+.judge-note {
+  margin-top: 18px;
+  max-width: 560px;
+  color: #8f86ad;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#shop { margin: 6px 0 18px; width: 100%; max-width: 640px; }
+#shop h2 {
+  margin: 0 0 10px;
+  font-size: 19px;
+  color: #ffe9a8;
+  letter-spacing: 1px;
+}
+.shop-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+/* More specific than `.overlay button` (amber), so the shop keeps its own look. */
+.overlay .shop-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  font-size: 14px;
+  font-weight: 400;
+  text-align: left;
+  color: #f2ead8;
+  background: rgba(20, 12, 40, 0.92);
+  border: 1px solid rgba(255, 179, 71, 0.45);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  box-shadow: none;
+  transform: none;
+}
+.overlay .shop-btn b { color: #ffb347; font-size: 15px; }
+.overlay .shop-btn span { color: #cfc6e8; font-size: 13px; }
+.overlay .shop-btn .shop-state { color: #37c8ab; font-weight: 700; }
+.overlay .shop-btn.owned { border-color: #37c8ab; opacity: 0.75; }
+.overlay .shop-btn.owned .shop-state { color: #37c8ab; }
+.overlay .shop-btn.poor { opacity: 0.6; }
+.overlay .shop-btn.poor .shop-state { color: #ff7d7d; }
+.shop-hint { color: #b9aed6; font-size: 13px; margin: 8px 0 0; }

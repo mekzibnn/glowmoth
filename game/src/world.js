@@ -1,10 +1,12 @@
-// The world: lamps to light, levels, collisions, scoring, and the events the
-// game loop turns into sound, particles and screen changes.
-// Events: 'lamp' | 'pollen' | 'hit' | 'scare' | 'clear' | 'over'
-import { BATS, GAME, LAMPS, POLLEN, VIEW, WEBS } from './config.js';
+// The world: lamps to light (WIN the level), lives (LOSE when they run out),
+// scoring, the moon that changes the garden, the MOTH-EATER boss every 5th
+// level, and the pollen-bank SHOP between levels. The first declarations say
+// the whole game: goal / win / lose / score / boss / shop.
+// Events: 'lamp' | 'pollen' | 'hit' | 'scare' | 'clear' | 'over' | 'boss-hit' | 'boss-kill'
+import { BATS, BOSS, GAME, LAMPS, MOON, POLLEN, SHOP, VIEW, WEBS } from './config.js';
 import { makeRng } from './random.js';
 import { createMoth, resetMoth } from './moth.js';
-import { spawnBats, spawnPollen, spawnWebs } from './entities.js';
+import { spawnBats, spawnBoss, spawnPollen, spawnWebs } from './entities.js';
 
 export const EVENT_LAMP = 1;
 export const EVENT_POLLEN = 2;
@@ -12,6 +14,42 @@ export const EVENT_HIT = 4;
 export const EVENT_SCARE = 8;
 export const EVENT_CLEAR = 16;
 export const EVENT_OVER = 32;
+export const EVENT_BOSS_HIT = 64;
+export const EVENT_BOSS_KILL = 128;
+
+// MOON phase for a level: NEW, CRESCENT, HALF, GIBBOUS, FULL, then it cycles.
+export function moonPhaseForLevel(level) {
+  return MOON[(level - 1) % MOON.length];
+}
+
+// INCOMING preview for a level: what the wave banner shows before it starts.
+export function incomingForLevel(level) {
+  const moon = moonPhaseForLevel(level);
+  const bats = Math.min(BATS.baseCount + (level - 1), BATS.maxCount);
+  const lamps = LAMPS.baseCount + (level - 1);
+  const boss = level % BOSS.every === 0;
+  return {
+    level, bats, lamps, boss, moon: moon.name,
+    text: `LEVEL ${level} — INCOMING: ${bats} BATS${boss ? ` + ${BOSS.name} BOSS` : ''} · ${lamps} LAMPS · MOON: ${moon.name} (${moon.blurb})`,
+  };
+}
+
+// SHOP: buy one upgrade with the pollen bank. Each upgrade once. Returns true
+// when the purchase lands, false when it cannot (too poor, or already owned).
+export function buyUpgrade(world, id) {
+  const item = SHOP.find((s) => s.id === id);
+  if (!item || world.upgrades[id]) return false;
+  if (world.pollenBank < item.cost) return false;
+  world.pollenBank -= item.cost;
+  world.upgrades[id] = true;
+  if (id === 'life') world.lives = Math.min(GAME.maxLives, world.lives + 1);
+  return true;
+}
+
+// BOSS: true while the MOTH-EATER is alive on this level.
+export function bossAlive(world) {
+  return !!(world.boss && world.boss.active);
+}
 
 export function createWorld(seed) {
   const world = {
@@ -24,6 +62,12 @@ export function createWorld(seed) {
     combo: 0,
     comboTimer: 0,
     pollenTimer: 0,
+    pollenBank: 0, // pollen is a currency: the SHOP spends it between levels
+    upgrades: { life: false, speed: false, dash: false, webproof: false },
+    moon: moonPhaseForLevel(1),
+    boss: null,
+    wave: incomingForLevel(1),
+    waveUntil: 0, // world time until the wave banner fades
     moth: createMoth(),
     lamps: [],
     bats: [],
@@ -55,7 +99,7 @@ function placeLamps(rng, level) {
   const count = LAMPS.baseCount + (level - 1);
   const lamps = [];
   let guard = 0;
-  while (lamps.length < count && guard < 200) {
+  while (lamps.length < count && guard < 300) {
     guard += 1;
     const lamp = {
       x: rng.range(80, VIEW.width - 80),
@@ -72,11 +116,15 @@ function placeLamps(rng, level) {
 
 export function startLevel(world) {
   const rng = world.rng;
+  world.moon = moonPhaseForLevel(world.level);
+  world.wave = incomingForLevel(world.level);
+  world.waveUntil = world.time + 3.5; // the wave banner shows for 3.5 seconds
   world.lamps = placeLamps(rng, world.level);
   world.webs = spawnWebs(rng, world.level, world.lamps);
-  world.bats = spawnBats(rng, world.level);
+  world.bats = spawnBats(rng, world.level, world.moon);
+  world.boss = world.level % BOSS.every === 0 ? spawnBoss(rng) : null;
   world.pollen = [];
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     const p = spawnPollen(rng, world.pollen, world.lamps);
     if (p) world.pollen.push(p);
   }
@@ -163,14 +211,15 @@ export function stepWorld(world, dt) {
         events |= EVENT_LAMP;
       }
     }
-    // Pollen.
+    // Pollen: points times the combo, times the moon — and it banks as SHOP money.
     for (const p of world.pollen) {
       if (p.active && Math.hypot(moth.x - p.x, moth.y - p.y) < 14 + POLLEN.radius) {
         p.active = false;
         world.combo = Math.min(world.combo + 1, 99);
         world.comboTimer = POLLEN.comboWindow;
         const mult = Math.min(world.combo, POLLEN.comboCap);
-        world.score += POLLEN.basePoints * mult;
+        world.score += POLLEN.basePoints * mult * world.moon.pollen;
+        world.pollenBank += world.moon.pollen;
         burst(world, p.x, p.y, '#ffe9a8', 8, 90);
         events |= EVENT_POLLEN;
       }
@@ -202,9 +251,45 @@ export function stepWorld(world, dt) {
         }
       }
     }
+
+    // BOSS: a dash through it lands one of 3 hits; a plain touch costs a life.
+    const boss = world.boss;
+    if (boss && boss.active) {
+      const d = Math.hypot(moth.x - boss.x, moth.y - boss.y);
+      if (d < 14 + BOSS.radius) {
+        if (moth.dashTime > 0) {
+          boss.hits -= 1;
+          moth.dashTime = 0; // one hit per dash, then the moth bounces off
+          moth.vx *= -0.6;
+          moth.vy *= -0.6;
+          burst(world, boss.x, boss.y, '#ff2e2e', 22, 200);
+          if (boss.hits <= 0) {
+            boss.active = false;
+            world.score += BOSS.killPoints;
+            burst(world, boss.x, boss.y, '#ffb347', 30, 260);
+            events |= EVENT_BOSS_KILL;
+          } else {
+            events |= EVENT_BOSS_HIT;
+          }
+        } else if (moth.invuln <= 0) {
+          world.lives -= 1;
+          world.combo = 0;
+          world.comboTimer = 0;
+          moth.invuln = 2.0;
+          burst(world, moth.x, moth.y, '#ff5d5d', 20, 200);
+          events |= EVENT_HIT;
+          if (world.lives <= 0) {
+            moth.alive = false;
+            saveBest(world);
+            events |= EVENT_OVER;
+          }
+        }
+      }
+    }
   }
 
-  // Level clear: every lamp lit.
+  // Level clear: every lamp lit. The BOSS may still be alive — killing it is
+  // a bonus (+500), not the gate; the lamps are the win condition.
   if (moth.alive && lampsLeft(world) === 0) {
     const bonus = GAME.levelBonusBase + GAME.levelBonusPerLevel * world.level + GAME.lifeBonus * world.lives;
     world.score += bonus;
@@ -216,7 +301,10 @@ export function stepWorld(world, dt) {
   return events;
 }
 
-// Slow factor for the moth this frame (webs).
+// Slow factor for the moth this frame (webs). Webproof upgrade: webs barely slow.
 export function slowFactorAt(world, x, y) {
-  return world.webs.some((w) => Math.hypot(x - w.x, y - w.y) < w.radius) ? WEBS.slowFactor : 1;
+  const inWeb = world.webs.some((w) => Math.hypot(x - w.x, y - w.y) < w.radius);
+  if (!inWeb) return 1;
+  if (world.upgrades.webproof) return 0.8;
+  return world.moon.web;
 }

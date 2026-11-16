@@ -136,6 +136,21 @@ export const sfx = {
   over() {
     [392, 329.63, 261.63, 196].forEach((f, i) => blip(f, f * 0.94, 0.22, 'triangle', 0.15, i * 0.13));
   },
+  // Boss kill: a big low roar that rises into a chirp.
+  boss() {
+    blip(220, 55, 0.4, 'sawtooth', 0.2);
+    blip(880, 1560, 0.2, 'square', 0.1, 0.25);
+  },
+  // One dash-hit on the boss: a heavy thud.
+  bossHit() {
+    blip(140, 60, 0.2, 'sawtooth', 0.22);
+    noiseBurst(0.12, 0.14, 500);
+  },
+  // Buying in the shop: a bright coin.
+  buy() {
+    blip(988, 988, 0.09, 'sine', 0.16);
+    blip(1319, 1319, 0.14, 'sine', 0.16, 0.08);
+  },
   // Button / start blip.
   ui() {
     blip(440, 660, 0.08, 'sine', 0.12);

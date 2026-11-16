@@ -1,7 +1,8 @@
 // The moth: position, velocity, dash, invulnerability, wing flap, and drawing.
 // Steers toward the pointer with smooth acceleration; arrow keys / WASD add a
 // direct push. A dash is a short burst in the current move direction that also
-// makes the moth briefly untouchable.
+// makes the moth briefly untouchable. UPGRADES (shop): Swift Wings +15% speed,
+// Long Dash recharges the dash in 0.7s instead of 1.1s.
 import { MOTH, VIEW } from './config.js';
 
 export function createMoth() {
@@ -32,7 +33,7 @@ export function resetMoth(moth) {
   moth.alive = true;
 }
 
-export function updateMoth(moth, input, dt, slowFactor) {
+export function updateMoth(moth, input, dt, slowFactor, upgrades = {}) {
   if (!moth.alive) return;
   if (moth.dashCooldown > 0) moth.dashCooldown -= dt;
   if (moth.invuln > 0) moth.invuln -= dt;
@@ -61,7 +62,7 @@ export function updateMoth(moth, input, dt, slowFactor) {
     ty /= len;
   }
 
-  const maxSpeed = MOTH.maxSpeed * slowFactor;
+  const maxSpeed = MOTH.maxSpeed * slowFactor * (upgrades.speed ? 1.15 : 1);
   if (moth.dashTime > 0) {
     moth.dashTime -= dt;
   } else {
@@ -91,7 +92,8 @@ export function updateMoth(moth, input, dt, slowFactor) {
 }
 
 // Start a dash in the direction the moth is currently moving (or facing).
-export function tryDash(moth) {
+// Long Dash (shop) recharges in 0.7s instead of 1.1s.
+export function tryDash(moth, upgrades = {}) {
   if (!moth.alive || moth.dashCooldown > 0 || moth.dashTime > 0) return false;
   let dx = moth.vx;
   let dy = moth.vy;
@@ -106,7 +108,7 @@ export function tryDash(moth) {
   moth.vx = dx * MOTH.dashSpeed;
   moth.vy = dy * MOTH.dashSpeed;
   moth.dashTime = MOTH.dashTime;
-  moth.dashCooldown = MOTH.dashCooldown;
+  moth.dashCooldown = upgrades.dash ? 0.7 : MOTH.dashCooldown;
   moth.invuln = Math.max(moth.invuln, MOTH.dashTime + 0.08);
   return true;
 }

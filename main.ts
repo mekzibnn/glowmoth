@@ -1,8 +1,11 @@
-// Glowmoth's hand-in program (Node 22, standard library only): it copies the
-// game/ folder and the screenshots/ folder from beside this file into /output
-// and writes /output/dossier.json, the summary the judge reads, with the
-// vendored make.fun library. Outside the grader's container, MAKEFUN_OUTPUT_DIR
-// stands in for /output:
+// Glowmoth v2's hand-in program (Node 22, standard library only): it copies
+// the game/ folder and the screenshots/ folder from beside this file into
+// /output and writes /output/dossier.json, the summary the judge reads, with
+// the vendored make.fun library. The game: GOAL light every lamp to WIN,
+// LOSE when 3 lives run out; score from lamps, pollen combos, scared bats;
+// the MOTH-EATER boss every 5th level; a pollen-bank SHOP between levels;
+// the moon changes the garden every level. Outside the grader's container,
+// MAKEFUN_OUTPUT_DIR stands in for /output:
 //
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
