@@ -354,6 +354,9 @@ export function stepWorld(world, dt) {
       const d = Math.hypot(wisp.x - mite.x, wisp.y - mite.y);
       if (d < scareRadius) {
         if (wisp.dashTime > 0) {
+          if (mite.hitCd > 0) continue; // one dash spends one hit: a Bulwark
+          // needs a second dash, not a longer overlap of the first
+          mite.hitCd = 0.35;
           mite.hits -= 1;
           if (mite.hits <= 0) {
             mite.active = false;

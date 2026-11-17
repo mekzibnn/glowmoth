@@ -45,6 +45,9 @@ export function spawnMites(rng, bloom, phase, tide) {
       flap: rng.range(0, Math.PI * 2),
       radius: kind.id === 'bulwark' ? 24 : kind.id === 'dart' ? 12 : MITES.radius,
       hits: kind.id === 'bulwark' ? 2 : 1, // Bulwark takes 2 dash-hits
+      hitCd: 0, // seconds until the next dash-hit can land: one dash spends
+      // one hit, however long the wisp overlaps the mite (a Bulwark needs
+      // 2 separate dashes, not one pass through it)
       spitTimer: kind.id === 'spitter' ? rng.range(1.5, 3) : 0,
       active: true,
     });
@@ -59,6 +62,7 @@ export function updateMites(mites, globs, dt, time, wisp, rng) {
   for (const mite of mites) {
     if (!mite.active) continue;
     mite.flap += dt * 14;
+    if (mite.hitCd > 0) mite.hitCd -= dt;
     if (mite.kind === 'dart') {
       // Darts fly straight and fast, then turn at the edge.
       mite.x += mite.dir * mite.speed * dt;
@@ -131,6 +135,11 @@ export function spawnBoss(rng, bloom) {
 export function updateBoss(boss, dt, time, wisp) {
   if (!boss.active) return;
   boss.flap += dt * 10;
+  // Escalation, matching the boss bar: a hurt boss swoops more often, and
+  // at its last hit faster (PHASE 2: every 3.2s; ENRAGED: every 2.5s at
+  // 240 px/s, from a base of 4.0s at 185 px/s).
+  const swoopInterval = boss.hits <= 1 ? 2.5 : boss.hits < boss.maxHits ? 3.2 : BOSS.swoopEvery;
+  const swoopSpeed = boss.hits <= 1 ? 240 : BOSS.swoopSpeed;
   if (boss.telegraph > 0) {
     boss.telegraph -= dt;
     if (boss.telegraph <= 0) {
@@ -138,8 +147,8 @@ export function updateBoss(boss, dt, time, wisp) {
       const dx = wisp.x - boss.x;
       const dy = wisp.y - boss.y;
       const d = Math.hypot(dx, dy) || 1;
-      boss.vx = (dx / d) * BOSS.swoopSpeed;
-      boss.vy = (dy / d) * BOSS.swoopSpeed;
+      boss.vx = (dx / d) * swoopSpeed;
+      boss.vy = (dy / d) * swoopSpeed;
       boss.swooping = 0.9;
     }
     return;
@@ -152,7 +161,7 @@ export function updateBoss(boss, dt, time, wisp) {
     boss.y = Math.max(60, Math.min(VIEW.height - 70, boss.y));
     if (boss.swooping <= 0) {
       boss.baseY = boss.y;
-      boss.swoopTimer = BOSS.swoopEvery;
+      boss.swoopTimer = swoopInterval;
     }
     return;
   }

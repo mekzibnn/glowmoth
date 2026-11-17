@@ -65,7 +65,9 @@ export const THORNS = {
 };
 
 // BOSSES — a giant blight-beast that hunts the wisp on blooms 3, 5 and 7:
-// dash-hits to scare it off, a telegraphed swoop every 4 seconds.
+// dash-hits to scare it off, a telegraphed swoop every 4 seconds — faster
+// and more often as it loses hits (PHASE 2: 3.2s; ENRAGED at 1 hit: 2.5s,
+// 240 px/s), matching the boss bar.
 export const BOSSES = {
   3: { name: 'THORNMAW', radius: 36, hits: 3, killPoints: 1000, color: '#7a2e6e', eye: '#ff5df2' },
   5: { name: 'BLIGHTMAW', radius: 40, hits: 3, killPoints: 1000, color: '#2e1040', eye: '#ff2e2e' },
