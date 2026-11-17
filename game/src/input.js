@@ -1,4 +1,4 @@
-// Keyboard + mouse state. The moth steers toward the pointer (mouse) or with
+// Keyboard + mouse state. The wisp steers toward the pointer (mouse) or with
 // WASD / arrow keys; Space dashes, P pauses, M mutes, R restarts, Enter starts.
 export function createInput(canvas) {
   const input = {
@@ -11,8 +11,8 @@ export function createInput(canvas) {
   function canvasPoint(event) {
     const rect = canvas.getBoundingClientRect();
     return {
-      x: ((event.clientX - rect.left) / rect.width) * 960,
-      y: ((event.clientY - rect.top) / rect.height) * 600,
+      x: ((event.clientX - rect.left) / rect.width) * 1280,
+      y: ((event.clientY - rect.top) / rect.height) * 800,
     };
   }
 

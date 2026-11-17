@@ -20,4 +20,4 @@ const server = createServer(async (req, res) => {
     res.end('not found');
   }
 });
-server.listen(port, () => console.log(`Glowmoth at http://localhost:${port}`));
+server.listen(port, () => console.log(`Bloomwarden at http://localhost:${port}`));

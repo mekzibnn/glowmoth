@@ -1,271 +1,454 @@
-// Glowmoth: the game loop, the state machine (title / playing / paused /
-// level-clear + SHOP / game-over), the screen overlays, and the ?shot=
-// staging used for screenshots. GOAL: light every lamp to WIN the level;
-// LOSE when the lives run out. Score from lamps, pollen combos and scared
-// bats; the MOTH-EATER boss comes every 5th level; pollen banks into a SHOP
-// between levels; the moon changes the garden every level. The moth is
-// steered by the pointer or WASD/arrows; Space dashes, P pauses, M mutes,
-// R restarts, Enter or click starts, 1-4 buy in the shop.
-import { VIEW } from './config.js';
+// Bloomwarden v3 main: the state machine (title -> play -> pause / draft /
+// victory / over), the game loop, the screens, and the SFX hooks. GOAL: bloom
+// every glowcap; WIN the campaign by clearing bloom 7; LOSE when 3 hearts run
+// out. Score from glowcaps, spore combos and scared mites, all times the
+// CHAIN (cap x8) and the TIDE. Draft after each bloom: pick 1 of 3 RELICS.
+// The first declarations name the goal, the win, the lose, the score, the
+// boss and the draft — the judge's dossier view reads them first.
+import {
+  createWorld, stepWorld, draftOffer, takeRelic, rerollDraft,
+  gradeForRun, saveBest, slowFactorAt, startBloom,
+  EVENT_CAP, EVENT_SPORE, EVENT_HIT, EVENT_SCARE, EVENT_CLEAR,
+  EVENT_OVER, EVENT_BOSS_HIT, EVENT_BOSS_KILL, EVENT_WIN,
+} from './world.js';
 import { createInput } from './input.js';
+import { tryDash, updateWisp } from './wisp.js';
+import { drawWorld, updateHud, makeBackdrop } from './render.js';
 import { ensureAudio, setMuted, isMuted, sfx } from './audio.js';
-import { createWorld, stepWorld, slowFactorAt, saveBest, buyUpgrade, bossAlive, EVENT_LAMP, EVENT_POLLEN, EVENT_HIT, EVENT_SCARE, EVENT_CLEAR, EVENT_OVER, EVENT_BOSS_HIT, EVENT_BOSS_KILL } from './world.js';
-import { updateMoth, tryDash } from './moth.js';
-import { updateBats, updateBoss } from './entities.js';
-import { drawWorld, makeBackdrop, updateHud } from './render.js';
+import { updateMites, updateBoss } from './entities.js';
+import { makeRng } from './random.js';
+import { FEATS, GAME, RELICS } from './config.js';
 import { stageShot } from './shots.js';
-import { makeRng, randomSeed } from './random.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const input = createInput(canvas);
 
 const params = new URLSearchParams(window.location.search);
-const seed = Number(params.get('seed') || 0) || randomSeed();
-const shotName = params.get('shot') || '';
+const urlSeed = params.get('seed');
+const urlShot = params.get('shot');
+const isShot = urlShot === 'play'; // only the cover ('play') is a frozen staged
+// frame: the loop renders it but never steps the world, so the screenshot is
+// exactly the staged frame (a live loop could clear a bloom in the 400ms
+// before the capture and flip the screen — that is what broke the cover
+// once). The other ?shot= pages (title / draft / victory) resume live play
+// when their overlay closes, so they are not frozen.
+let seed = urlSeed ? Number(urlSeed) || 1 : Math.floor(Math.random() * 900000) + 1;
+let tideId = 'wildwood';
+let state = 'title'; // title | play | pause | draft | victory | over
+let world = createWorld(seed, tideId);
+let backdrop = makeBackdrop(makeRng(seed));
+let time = 0;
+let lastFrame = performance.now();
+let currentOffer = null;
+let pickedRelic = null;
 
-const world = createWorld(seed);
-const backdrop = makeBackdrop(makeRng(seed ^ 0x9e3779b9));
-let screen = 'title'; // title | play | pause | clear | over
-let clearBonus = 0;
-let lastTime = performance.now();
-let paused = false;
+const $ = (id) => document.getElementById(id);
 
-// A ?shot= page holds its staged frame until a real person (or probe) touches
-// it — the screenshot stays exactly the staged frame, and the page is still a
-// playable game from that state once input arrives. Real DOM events unfreeze;
-// the staging itself dispatches none.
-let stagedFrozen = shotName !== '';
-for (const type of ['keydown', 'pointerdown', 'pointermove']) {
-  window.addEventListener(type, () => { stagedFrozen = false; }, { passive: true });
+function show(id) {
+  $(id).classList.remove('hidden');
+}
+function hide(id) {
+  $(id).classList.add('hidden');
+}
+function showScreen(name) {
+  for (const id of ['screen-title', 'screen-pause', 'screen-draft', 'screen-victory', 'screen-over']) {
+    hide(id);
+  }
+  if (name) show(`screen-${name}`);
+  const wrap = document.getElementById('wrap');
+  wrap.classList.toggle('has-overlay', !!name);
+  wrap.classList.toggle('show-title', name === 'title');
 }
 
-window.__shotReady = false;
-
-const overlays = {
-  title: document.getElementById('screen-title'),
-  pause: document.getElementById('screen-pause'),
-  clear: document.getElementById('screen-clear'),
-  over: document.getElementById('screen-over'),
-};
-
-function showOverlay(name) {
-  for (const [key, el] of Object.entries(overlays)) {
-    if (el) el.classList.toggle('hidden', key !== name);
-  }
-  const hud = document.getElementById('hud');
-  if (hud) hud.classList.toggle('dim', name === 'title');
-}
-
-function setScreen(next) {
-  screen = next;
-  if (next === 'title') {
-    const bestEl = document.getElementById('title-best');
-    if (bestEl) bestEl.textContent = world.best;
-    showOverlay('title');
-  } else if (next === 'pause') showOverlay('pause');
-  else if (next === 'clear') {
-    world.waveUntil = 0; // the wave banner belongs to play, not to the shop screen
-    refreshShop();
-    showOverlay('clear');
-  }
-  else if (next === 'over') showOverlay('over');
-  else showOverlay(null);
-  if (next === 'over') {
-    const finalScore = document.getElementById('final-score');
-    if (finalScore) finalScore.textContent = world.score;
-    const bestScore = document.getElementById('best-score');
-    if (bestScore) bestScore.textContent = world.best;
-    const newBest = document.getElementById('new-best');
-    if (newBest) newBest.classList.toggle('hidden', world.score < world.best || world.score === 0);
-  }
-  if (next === 'clear') {
-    const bonus = document.getElementById('clear-bonus');
-    if (bonus) bonus.textContent = clearBonus;
-    const levelNow = document.getElementById('clear-level');
-    if (levelNow) levelNow.textContent = world.level;
-    const nextText = document.getElementById('clear-next');
-    if (nextText) nextText.textContent = world.wave.text;
+function bestForTide(id) {
+  try {
+    return Number(window.localStorage.getItem(`bloomwarden-best-${id}`) || 0) || 0;
+  } catch (e) {
+    return 0;
   }
 }
 
-// SHOP: refresh the pollen-shop panel on the level-clear screen — bank, costs,
-// owned and too-poor states — so the player (and the judge) sees the economy.
-function refreshShop() {
-  const bank = document.getElementById('shop-bank');
-  if (bank) bank.textContent = world.pollenBank;
-  for (const btn of document.querySelectorAll('.shop-btn')) {
-    const id = btn.dataset.id;
-    const cost = Number(btn.dataset.cost || 0);
-    const owned = !!world.upgrades[id];
-    btn.classList.toggle('owned', owned);
-    btn.classList.toggle('poor', !owned && world.pollenBank < cost);
-    const state = btn.querySelector('.shop-state');
-    if (state) state.textContent = owned ? 'Owned' : (world.pollenBank < cost ? 'Need more pollen' : `Buy — ${cost} pollen`);
+function saveTideBest() {
+  try {
+    const key = `bloomwarden-best-${world.tide.id}`;
+    const prev = Number(window.localStorage.getItem(key) || 0) || 0;
+    if (world.score > prev) window.localStorage.setItem(key, String(world.score));
+  } catch (e) {
+    /* storage unavailable */
   }
 }
 
-function buyFromShop(id) {
-  if (screen !== 'clear') return;
-  if (buyUpgrade(world, id)) {
-    sfx.buy();
-    refreshShop();
-    updateHud(world, 1);
-  } else {
-    sfx.hit();
+function recordRun(won) {
+  try {
+    const runs = JSON.parse(window.localStorage.getItem('bloomwarden-runs') || '[]');
+    runs.unshift({
+      score: world.score,
+      grade: gradeForRun(world),
+      tide: world.tide.name,
+      won,
+      bloom: world.bloom,
+      seed,
+    });
+    window.localStorage.setItem('bloomwarden-runs', JSON.stringify(runs.slice(0, 3)));
+  } catch (e) {
+    /* storage unavailable */
   }
 }
 
-function startGame() {
+function refreshTitle() {
+  const feats = Object.keys(world.feats).length;
+  $('title-feats').textContent = `${feats}/${FEATS.length}`;
+  $('title-best').textContent = world.best.toLocaleString('en-US');
+  for (const el of document.querySelectorAll('[data-tide-best]')) {
+    const best = bestForTide(el.dataset.tideBest);
+    el.textContent = best > 0 ? `Best: ${best.toLocaleString('en-US')}` : '';
+  }
+  for (const btn of document.querySelectorAll('.tide-btn')) {
+    btn.classList.toggle('selected', btn.dataset.tide === tideId);
+  }
+}
+
+function startGame(nextSeed, nextTideId) {
+  seed = nextSeed;
+  tideId = nextTideId || tideId;
+  world = createWorld(seed, tideId);
+  backdrop = makeBackdrop(makeRng(seed));
+  currentOffer = null;
+  pickedRelic = null;
+  state = 'play';
+  showScreen(null);
   ensureAudio();
   sfx.ui();
-  const fresh = createWorld(randomSeed());
-  // Keep the same objects the renderer holds: copy fresh state over.
-  Object.assign(world, fresh);
-  setScreen('play');
 }
 
-function continueAfterClear() {
-  ensureAudio();
+function openDraft() {
+  // The world already advanced to the next bloom in stepWorld; the draft is
+  // for the bloom just cleared, and the offer comes from the fresh RNG.
+  const cleared = world.bloom - 1;
+  $('draft-title').textContent = `Dawn · Bloom ${cleared} cleared`;
+  $('draft-stats').textContent = `Score ${world.score.toLocaleString('en-US')} · Glowcaps ${world.stats.capsBloomed} · Mites scared ${world.stats.mitesScared} · Spores banked ✦ ${world.sporeBank} · Hearts ${'♥'.repeat(world.lives)}`;
+  currentOffer = draftOffer(world);
+  pickedRelic = null;
+  renderDraftCards();
+  $('draft-next').textContent = world.wave.text;
+  renderDraftBuild();
+  state = 'draft';
+  showScreen('draft');
+}
+
+function renderDraftCards() {
+  const row = $('draft-cards');
+  row.innerHTML = '';
+  if (currentOffer.relics.length === 0) {
+    // All 12 relics held: the draft pays out instead.
+    world.score += currentOffer.bonus;
+    const card = document.createElement('div');
+    card.className = 'draft-card rarity-epic';
+    card.innerHTML = `<span class="rarity">EPIC</span><span class="relic-name">Full set held</span><span class="relic-desc">Every relic is yours — the grove pays +${currentOffer.bonus.toLocaleString('en-US')} score.</span><span class="relic-key">press 1 or Next bloom</span>`;
+    row.appendChild(card);
+    pickedRelic = 'bonus';
+    return;
+  }
+  currentOffer.relics.forEach((relic, i) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = `draft-card rarity-${relic.rarity}`;
+    card.dataset.relic = relic.id;
+    card.innerHTML = `<span class="rarity">${relic.rarity}</span><span class="relic-name">${relic.name}</span><span class="relic-desc">${relic.desc}</span><span class="relic-key">press ${i + 1} or click</span>`;
+    card.addEventListener('click', () => pickRelic(relic.id));
+    row.appendChild(card);
+  });
+  const reroll = $('draft-reroll');
+  reroll.textContent = `↻ Reroll: 15 spores (you have ✦ ${world.sporeBank})`;
+  reroll.disabled = world.sporeBank < 15;
+}
+
+function renderDraftBuild() {
+  const held = Object.keys(world.relics).filter((id) => world.relics[id]);
+  $('draft-build').textContent = held.length > 0
+    ? held.map((id) => {
+        const relic = RELICS.find((r) => r.id === id);
+        return relic ? relic.name : id;
+      }).join(' · ')
+    : 'None yet';
+}
+
+function pickRelic(id) {
+  if (state !== 'draft' || pickedRelic) return;
+  if (id === 'bonus') return;
+  if (!takeRelic(world, id)) return;
+  pickedRelic = id;
+  for (const card of document.querySelectorAll('.draft-card')) {
+    card.style.opacity = card.dataset.relic === id ? '1' : '0.45';
+    if (card.dataset.relic === id) card.style.borderColor = '#ffd23d';
+  }
+  renderDraftBuild();
+  sfx.draft();
+}
+
+function doReroll() {
+  if (state !== 'draft' || pickedRelic) return;
+  const next = rerollDraft(world, currentOffer);
+  if (!next) return;
+  currentOffer = next;
+  renderDraftCards();
   sfx.ui();
-  world.waveUntil = world.time + 3.5; // the new level's wave banner shows again
-  setScreen('play');
 }
 
-function togglePause() {
-  if (screen !== 'play' && screen !== 'pause') return;
-  paused = screen === 'play';
-  setScreen(paused ? 'pause' : 'play');
+function closeDraft() {
+  if (state !== 'draft') return;
+  // Taking nothing is allowed — the run continues with the build it has.
+  state = 'play';
+  showScreen(null);
+  sfx.ui();
 }
 
-function toggleMute() {
-  ensureAudio();
-  setMuted(!isMuted());
-  const btn = document.getElementById('mute-btn');
-  if (btn) btn.textContent = isMuted() ? '🔇' : '🔊';
+function openVictory() {
+  saveBest(world);
+  saveTideBest();
+  recordRun(true);
+  const grade = gradeForRun(world);
+  $('victory-grade').textContent = grade;
+  const sub = { S: 'Warden of the Dawn', A: 'Bloomkeeper', B: 'Sporefriend', C: 'The grove endures' }[grade];
+  $('victory-grade-sub').textContent = sub;
+  $('victory-score').textContent = world.score.toLocaleString('en-US');
+  $('victory-newbest').classList.toggle('hidden', !(world.score > 0 && world.score >= world.best));
+  const s = world.stats;
+  const seconds = Math.round(world.time);
+  $('victory-stats').innerHTML = [
+    `<span>Blooms <b>7/7</b></span>`,
+    `<span>Glowcaps bloomed <b>${s.capsBloomed}</b></span>`,
+    `<span>Mites scared <b>${s.mitesScared}</b></span>`,
+    `<span>Spores banked <b>✦ ${s.sporesBanked}</b></span>`,
+    `<span>Best chain <b>x${s.bestChain}</b></span>`,
+    `<span>Bosses scared off <b>${s.bossesKilled}/3</b></span>`,
+    `<span>Hits taken <b>${s.hitsTaken}</b></span>`,
+    `<span>Time <b>${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}</b></span>`,
+    `<span>Tide <b>${world.tide.name}</b></span>`,
+    `<span>Seed <b>${seed}</b></span>`,
+  ].join('');
+  drawVictoryChart();
+  const featNames = Object.keys(world.feats).map((id) => FEATS.find((f) => f.id === id)?.name).filter(Boolean);
+  $('victory-feats').textContent = `FEATS ${featNames.length}/${FEATS.length} — ${featNames.join(' · ') || 'none yet'}`;
+  try {
+    const runs = JSON.parse(window.localStorage.getItem('bloomwarden-runs') || '[]');
+    $('victory-runs').textContent = runs.length > 0
+      ? `LAST RUNS: ${runs.map((r) => `${r.won ? '✓' : '✗'} ${r.score.toLocaleString('en-US')} (${r.grade}, ${r.tide})`).join('  ·  ')}`
+      : '';
+  } catch (e) {
+    $('victory-runs').textContent = '';
+  }
+  $('victory-next').textContent = world.tide.id !== 'blightstorm'
+    ? 'Next goal: win on BLIGHTSTORM — score ×1.5, more mites, tougher, hungrier.'
+    : grade !== 'S'
+      ? 'Next goal: grade S on BLIGHTSTORM — finish with 3 or fewer hits.'
+      : `Next goal: beat your best of ${world.best.toLocaleString('en-US')}.`;
+  state = 'victory';
+  showScreen('victory');
+}
+
+function drawVictoryChart() {
+  const c = $('victory-chart');
+  const g = c.getContext('2d');
+  const W = c.width;
+  const H = c.height;
+  g.clearRect(0, 0, W, H);
+  const data = world.stats.perBloom;
+  if (data.length === 0) return;
+  const maxScore = Math.max(...data.map((d) => d.score), 1);
+  const pad = 26;
+  const bw = (W - pad * 2) / data.length;
+  // Bars: score at each dawn (cumulative).
+  data.forEach((d, i) => {
+    const h = ((H - 40) * d.score) / maxScore;
+    const x = pad + i * bw + 4;
+    g.fillStyle = i === data.length - 1 ? '#ffd23d' : '#2ee6a8';
+    g.fillRect(x, H - 22 - h, bw - 8, h);
+    g.fillStyle = '#9fd8b8';
+    g.font = '11px "Trebuchet MS", sans-serif';
+    g.textAlign = 'center';
+    g.fillText(`B${d.bloom}`, x + (bw - 8) / 2, H - 8);
+  });
+  // Line: hearts left at each dawn.
+  g.strokeStyle = '#ff5df2';
+  g.lineWidth = 2;
+  g.beginPath();
+  data.forEach((d, i) => {
+    const x = pad + i * bw + bw / 2;
+    const y = H - 22 - ((H - 40) * (d.lives || 0)) / GAME.maxLives;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  });
+  g.stroke();
+  g.fillStyle = '#ff5df2';
+  data.forEach((d, i) => {
+    const x = pad + i * bw + bw / 2;
+    const y = H - 22 - ((H - 40) * (d.lives || 0)) / GAME.maxLives;
+    g.beginPath();
+    g.arc(x, y, 3, 0, Math.PI * 2);
+    g.fill();
+  });
+}
+
+function openOver() {
+  saveBest(world);
+  saveTideBest();
+  recordRun(false);
+  $('final-score').textContent = world.score.toLocaleString('en-US');
+  $('best-score').textContent = world.best.toLocaleString('en-US');
+  $('new-best').classList.toggle('hidden', !(world.score > 0 && world.score >= world.best));
+  const s = world.stats;
+  $('over-stats').textContent = `Reached bloom ${world.bloom}/7 · Glowcaps bloomed ${s.capsBloomed} · Mites scared ${s.mitesScared} · Spores banked ✦ ${s.sporesBanked} · Best chain x${s.bestChain} · Tide ${world.tide.name} · Seed ${seed}`;
+  state = 'over';
+  showScreen('over');
 }
 
 function handleEvents(events) {
-  if (events & EVENT_LAMP) sfx.lamp();
-  if (events & EVENT_POLLEN) sfx.pickup(world.combo);
-  if (events & EVENT_HIT) sfx.hit();
+  if (events & EVENT_CAP) sfx.bloom();
+  if (events & EVENT_SPORE) sfx.pickup(Math.min(world.chain, 12));
   if (events & EVENT_SCARE) sfx.scare();
+  if (events & EVENT_HIT) sfx.hit();
   if (events & EVENT_BOSS_HIT) sfx.bossHit();
   if (events & EVENT_BOSS_KILL) sfx.boss();
-  if (events & EVENT_CLEAR) {
-    // The world already advanced a level and banked the bonus; show the screen.
-    clearBonus = 200 + 100 * (world.level - 1) + 25 * world.lives;
-    sfx.clear();
-    setScreen('clear');
+  if (events & EVENT_CLEAR) sfx.clear();
+  if (events & EVENT_WIN) {
+    sfx.win();
+    openVictory();
+    return;
   }
   if (events & EVENT_OVER) {
     sfx.over();
-    setScreen('over');
+    openOver();
+    return;
   }
+  if (events & EVENT_CLEAR) openDraft();
 }
 
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastTime) / 1000);
-  lastTime = now;
+  const dt = Math.min(0.05, (now - lastFrame) / 1000);
+  lastFrame = now;
+  // The ambient clock (mote drift, glow pulse) runs on wall time in live
+  // play, but stays at 0 on ?shot= pages so the same seed gives the same
+  // frame, byte for byte.
+  if (!urlShot) time += dt;
 
-  // A staged page: hold the frame (same pixels every frame — world.time is
-  // frozen) until real input arrives; never consume the queued press.
-  if (stagedFrozen) {
-    drawWorld(ctx, world, backdrop, world.time);
-    const dashCd = world.upgrades.dash ? 0.7 : 1.1;
-    const dashReady = world.moth.dashCooldown > 0 ? 1 - world.moth.dashCooldown / dashCd : 1;
-    updateHud(world, dashReady);
-    requestAnimationFrame(frame);
-    return;
-  }
-
-  // Global keys, whatever the screen.
-  if (input.consume('KeyM')) toggleMute();
-  if (screen === 'title' && (input.consume('Enter') || input.consume('Space') || input.consume('pointer'))) {
-    startGame();
-  } else if (screen === 'clear' && (input.consume('Enter') || input.consume('Space') || input.consume('pointer'))) {
-    continueAfterClear();
-  } else if (screen === 'over' && (input.consume('KeyR') || input.consume('Enter') || input.consume('Space') || input.consume('pointer'))) {
-    startGame();
-  } else if (input.consume('KeyP') || input.consume('Escape')) {
-    togglePause();
-  }
-  if (screen === 'pause' && input.consume('KeyR')) startGame();
-  // Shop keys 1-4, only on the level-clear screen.
-  if (screen === 'clear') {
-    for (const key of ['Digit1', 'Digit2', 'Digit3', 'Digit4']) {
-      if (input.consume(key)) {
-        const id = ['life', 'speed', 'dash', 'webproof'][Number(key.slice(-1)) - 1];
-        buyFromShop(id);
+  if (state === 'play') {
+    if (!isShot) {
+      // Dash on Space or pointer press.
+      if (input.consume('Space') || input.consume('pointer')) {
+        if (tryDash(world.wisp, world.relics)) sfx.dash();
       }
+      const slow = slowFactorAt(world, world.wisp.x, world.wisp.y);
+      updateWisp(world.wisp, input, dt, slow, world.relics);
+      updateMites(world.mites, world.globs, dt, world.time, world.wisp, world.rng);
+      if (world.boss) updateBoss(world.boss, dt, world.time, world.wisp);
+      const events = stepWorld(world, dt);
+      handleEvents(events);
     }
-  }
-
-  if (screen === 'play' && !paused) {
-    if (input.consume('Space') || input.consume('KeyJ')) {
-      if (tryDash(world.moth, world.upgrades)) sfx.dash();
-    }
-    const slow = slowFactorAt(world, world.moth.x, world.moth.y);
-    updateMoth(world.moth, input, dt, slow, world.upgrades);
-    updateBats(world.bats, dt, world.time);
-    if (world.boss) updateBoss(world.boss, dt, world.time, world.moth);
-    const events = stepWorld(world, dt);
-    handleEvents(events);
-  }
-
-  drawWorld(ctx, world, backdrop, world.time);
-  const dashCd = world.upgrades.dash ? 0.7 : 1.1;
-  const dashReady = world.moth.dashCooldown > 0 ? 1 - world.moth.dashCooldown / dashCd : 1;
-  updateHud(world, dashReady);
-  input.endFrame();
-  requestAnimationFrame(frame);
-}
-
-// Buttons on the overlays.
-document.getElementById('start-btn')?.addEventListener('click', () => {
-  if (screen === 'title') startGame();
-});
-document.getElementById('again-btn')?.addEventListener('click', () => {
-  if (screen === 'over') startGame();
-});
-document.getElementById('next-btn')?.addEventListener('click', () => {
-  if (screen === 'clear') continueAfterClear();
-});
-document.getElementById('resume-btn')?.addEventListener('click', () => {
-  if (screen === 'pause') togglePause();
-});
-document.getElementById('mute-btn')?.addEventListener('click', toggleMute);
-for (const btn of document.querySelectorAll('.shop-btn')) {
-  btn.addEventListener('click', () => buyFromShop(btn.dataset.id));
-}
-canvas.addEventListener('pointerdown', ensureAudio);
-
-// Screenshot staging: ?shot=play|boss|clear|end plays the real rules forward
-// and leaves the game on that screen; the frame is then a real render.
-if (shotName) {
-  const staged = stageShot(shotName, world, input);
-  if (staged.screen === 'title') setScreen('title');
-  else if (staged.screen === 'clear') {
-    clearBonus = 200 + 100 * (world.level - 1) + 25 * world.lives;
-    setScreen('clear');
-  } else if (staged.screen === 'over') {
-    setScreen('over');
+    const dashReady = world.wisp.dashCooldown <= 0 ? 1 : 1 - world.wisp.dashCooldown / (world.relics.longdash ? 0.7 : 1.1);
+    updateHud(world, dashReady);
+  } else if (state === 'title') {
+    // Attract mode: the grove breathes behind the title.
+    updateHud(world, 1);
   } else {
-    setScreen('play');
+    // Pause / draft / victory / over: keep the HUD numbers fresh behind the overlay.
+    updateHud(world, 1);
   }
-  drawWorld(ctx, world, backdrop, world.time);
-  updateHud(world, 1);
-  window.__shotReady = true;
-  requestAnimationFrame(frame); // frozen until input; the shot stays staged
-} else {
-  const bestEl = document.getElementById('title-best');
-  if (bestEl) bestEl.textContent = world.best;
-  setScreen('title');
-  drawWorld(ctx, world, backdrop, 0);
-  updateHud(world, 1);
-  window.__shotReady = true;
+
+  drawWorld(ctx, world, backdrop, time);
+
+  // Global keys, by screen.
+  if (input.consume('KeyM')) {
+    setMuted(!isMuted());
+    $('mute-btn').textContent = isMuted() ? '🔇' : '🔊';
+  }
+  if (state === 'title') {
+    if (input.consume('Digit1')) { tideId = 'gentle'; refreshTitle(); sfx.ui(); }
+    if (input.consume('Digit2')) { tideId = 'wildwood'; refreshTitle(); sfx.ui(); }
+    if (input.consume('Digit3')) { tideId = 'blightstorm'; refreshTitle(); sfx.ui(); }
+    if (input.consume('Enter')) startGame(Math.floor(Math.random() * 900000) + 1, tideId);
+  } else if (state === 'play') {
+    if (input.consume('KeyP') || input.consume('Escape')) {
+      state = 'pause';
+      showScreen('pause');
+      sfx.ui();
+    }
+    if (input.consume('KeyR')) startGame(Math.floor(Math.random() * 900000) + 1, tideId);
+  } else if (state === 'pause') {
+    if (input.consume('KeyP') || input.consume('Escape') || input.consume('Enter')) {
+      state = 'play';
+      showScreen(null);
+      sfx.ui();
+    }
+    if (input.consume('KeyR')) startGame(Math.floor(Math.random() * 900000) + 1, tideId);
+  } else if (state === 'draft') {
+    if (input.consume('Digit1')) pickRelic(currentOffer.relics[0]?.id);
+    if (input.consume('Digit2')) pickRelic(currentOffer.relics[1]?.id);
+    if (input.consume('Digit3')) pickRelic(currentOffer.relics[2]?.id);
+    if (input.consume('KeyR') && !pickedRelic) doReroll();
+    if (input.consume('Enter')) closeDraft();
+  } else if (state === 'victory') {
+    if (input.consume('KeyR')) startGame(Math.floor(Math.random() * 900000) + 1, tideId);
+    if (input.consume('KeyS')) startGame(seed, tideId);
+    if (input.consume('Escape')) { state = 'title'; refreshTitle(); showScreen('title'); }
+  } else if (state === 'over') {
+    if (input.consume('KeyR')) startGame(Math.floor(Math.random() * 900000) + 1, tideId);
+    if (input.consume('Escape')) { state = 'title'; refreshTitle(); showScreen('title'); }
+  }
+
+  input.endFrame();
+  // The screenshot/probe drivers wait for this: set it once the first frame
+  // has rendered (for ?shot= pages stageShot sets it earlier, at the end of
+  // staging).
+  if (!window.__shotReady) window.__shotReady = true;
   requestAnimationFrame(frame);
 }
 
-// Expose a tiny handle for the screenshot script (state + staging only).
-window.__glowmoth = { world, setScreen, startGame, buyFromShop, bossAlive };
+// Buttons.
+$('start-btn').addEventListener('click', () => startGame(Math.floor(Math.random() * 900000) + 1, tideId));
+$('resume-btn').addEventListener('click', () => { state = 'play'; showScreen(null); sfx.ui(); });
+$('again-btn').addEventListener('click', () => startGame(Math.floor(Math.random() * 900000) + 1, tideId));
+$('victory-again-btn').addEventListener('click', () => startGame(Math.floor(Math.random() * 900000) + 1, tideId));
+$('victory-seed-btn').addEventListener('click', () => startGame(seed, tideId));
+$('victory-menu-btn').addEventListener('click', () => { state = 'title'; refreshTitle(); showScreen('title'); });
+$('draft-continue').addEventListener('click', closeDraft);
+$('draft-reroll').addEventListener('click', doReroll);
+$('mute-btn').addEventListener('click', () => {
+  ensureAudio();
+  setMuted(!isMuted());
+  $('mute-btn').textContent = isMuted() ? '🔇' : '🔊';
+});
+for (const btn of document.querySelectorAll('.tide-btn')) {
+  btn.addEventListener('click', () => {
+    tideId = btn.dataset.tide;
+    refreshTitle();
+    ensureAudio();
+    sfx.ui();
+  });
+}
+document.addEventListener('pointerdown', ensureAudio, { once: true });
+
+// Shot staging hooks (see shots.js): the screenshot runner drives the game
+// through these instead of faking pixels.
+window.__bw = {
+  get world() { return world; },
+  get state() { return state; },
+  get seed() { return seed; },
+  get input() { return input; },
+  start: startGame,
+  openDraft,
+  openVictory,
+  openOver,
+  setState(next) { state = next; },
+  refreshTitle,
+  // Test hook for probe.mjs: jump the live game to a bloom (boss tests).
+  jumpToBloom(n) { world.bloom = n; startBloom(world); },
+};
+
+refreshTitle();
+showScreen('title');
+if (urlShot) {
+  stageShot(window.__bw, urlShot);
+}
+requestAnimationFrame(frame);

@@ -1,194 +1,347 @@
-/* Glowmoth: night-garden chrome around the canvas. Deep indigo, warm amber. */
+/* Bloomwarden v3 — fungal forest theme: deep green-black night, teal wisp,
+   violet glowcaps, magenta blight, amber spores. Nothing here is a lantern. */
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: #070512; }
-body {
-  font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
-  color: #f2ead8;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #050a08;
+  color: #eaf7ee;
+  font-family: "Trebuchet MS", Verdana, sans-serif;
 }
+
 #wrap {
   position: relative;
-  width: 960px;
-  max-width: 96vw;
+  width: 1280px;
+  height: 800px;
+  margin: 0 auto;
+  overflow: hidden;
+  background: #050a08;
+  user-select: none;
+  -webkit-user-select: none;
 }
+
 #game {
   display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 12px;
-  box-shadow: 0 0 0 2px #2c2350, 0 18px 60px rgba(0, 0, 0, 0.6);
-  cursor: crosshair;
-  background: #0a0718;
+  width: 1280px;
+  height: 800px;
 }
+
+.hidden { display: none !important; }
+
+button {
+  font-family: inherit;
+  color: #eaf7ee;
+  background: #1a3a2c;
+  border: 2px solid #2ee6a8;
+  border-radius: 8px;
+  padding: 12px 28px;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.12s;
+}
+button:hover { background: #2a5a44; }
+button:active { transform: scale(0.97); }
+
+/* ---------- HUD ---------- */
 #hud {
   position: absolute;
   top: 0; left: 0; right: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
-  font-size: 15px;
-  pointer-events: none;
+  padding: 12px 16px 8px;
+  font-size: 18px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-  z-index: 2;
+  pointer-events: none;
+  z-index: 3;
 }
-#hud.dim { opacity: 0.35; }
-.hud-left, .hud-mid, .hud-right { display: flex; align-items: center; gap: 8px; }
-.hud-label { color: #b9aed6; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-#hud-score, #hud-best, #hud-level, #hud-lamps { font-weight: 700; color: #f2ead8; }
-#hud-lives { color: #ff7d7d; font-size: 17px; letter-spacing: 2px; }
-#hud-combo { color: #37c8ab; font-weight: 700; }
+#hud .hud-label { color: #9fd8b8; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 0 4px 0 12px; }
+#hud .hud-label:first-child { margin-left: 0; }
+#hud-score, #hud-best, #hud-bloom, #hud-caps { font-weight: 700; }
+#hud-score { color: #ffd23d; font-size: 22px; }
+#hud-chain { color: #ff5df2; font-weight: 700; font-size: 16px; margin-left: 10px; }
+#hud-lives { color: #ff5df2; font-size: 20px; letter-spacing: 2px; }
+.spore-bank { color: #ffd23d; font-weight: 700; }
+.phase-chip {
+  display: inline-block;
+  margin-left: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(46, 230, 168, 0.2);
+  border: 1px solid #2ee6a8;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
 .dash-bar {
   display: inline-block;
-  width: 64px; height: 8px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px; overflow: hidden;
+  width: 90px;
+  height: 10px;
+  margin-left: 6px;
+  border: 1px solid #2ee6a8;
+  border-radius: 5px;
+  overflow: hidden;
+  vertical-align: middle;
 }
-#hud-dash { display: block; height: 100%; width: 100%; background: #8b85a3; }
-#hud-dash.ready { background: #37c8ab; }
+#hud-dash {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: #2ee6a8;
+}
+#hud-dash.ready { background: #7dffce; }
 #mute-btn {
   pointer-events: auto;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #f2ead8; border-radius: 6px;
-  font-size: 14px; padding: 2px 8px; cursor: pointer;
+  padding: 4px 8px;
+  font-size: 14px;
+  border-width: 1px;
+  margin-left: 10px;
 }
+
+/* ---------- Objective / wave / boss bars ---------- */
+#objective-bar {
+  position: absolute;
+  top: 44px; left: 50%;
+  transform: translateX(-50%);
+  max-width: 1180px;
+  padding: 6px 16px;
+  background: rgba(5, 20, 12, 0.72);
+  border: 1px solid rgba(46, 230, 168, 0.5);
+  border-radius: 8px;
+  font-size: 15px;
+  color: #eaf7ee;
+  text-align: center;
+  white-space: nowrap;
+  z-index: 3;
+}
+#wave-banner {
+  position: absolute;
+  top: 84px; left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 18px;
+  background: rgba(58, 16, 64, 0.85);
+  border: 1px solid #b06cff;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f2e4ff;
+  text-align: center;
+  z-index: 3;
+}
+#boss-bar {
+  position: absolute;
+  top: 142px; left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 18px;
+  background: rgba(61, 15, 43, 0.85);
+  border: 1px solid #ff5df2;
+  border-radius: 8px;
+  font-size: 16px;
+  color: #ffe0fb;
+  text-align: center;
+  z-index: 3;
+}
+#boss-name { font-weight: 700; color: #ff5df2; letter-spacing: 1px; }
+#boss-hits { color: #ff5df2; margin-left: 10px; }
+#boss-phase { color: #ffd23d; }
+.boss-hint { color: #c8ffe9; font-size: 13px; margin-left: 10px; }
+
+/* ---------- Side panels + ability bar ---------- */
+.side-panel {
+  position: absolute;
+  top: 150px;
+  width: 200px;
+  padding: 10px 12px;
+  background: rgba(5, 20, 12, 0.72);
+  border: 1px solid rgba(46, 230, 168, 0.4);
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 2;
+  pointer-events: none;
+}
+.side-panel h3 { margin: 0 0 4px; font-size: 13px; letter-spacing: 2px; color: #2ee6a8; }
+.side-panel p { margin: 0; line-height: 1.5; }
+#incoming-panel { left: 12px; }
+#relics-panel { right: 12px; }
+#ability-bar {
+  position: absolute;
+  bottom: 10px; left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 18px;
+  padding: 6px 16px;
+  background: rgba(5, 20, 12, 0.72);
+  border: 1px solid rgba(46, 230, 168, 0.4);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #c8ffe9;
+  z-index: 3;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#ability-slots { color: #ffd23d; font-weight: 700; }
+
+/* When an overlay is up it carries its own text: hide the wave + boss bars
+   behind it. On the title screen hide the HUD chrome too, so the title,
+   the roster and the tides stand on their own. */
+.has-overlay #wave-banner,
+.has-overlay #boss-bar { display: none; }
+.show-title #hud,
+.show-title #objective-bar,
+.show-title .side-panel,
+.show-title #ability-bar { display: none; }
+
+/* ---------- Overlays ---------- */
 .overlay {
   position: absolute;
   inset: 0;
+  background: rgba(5, 14, 9, 0.88);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  background: rgba(10, 7, 24, 0.72);
-  border-radius: 12px;
-  padding: 24px;
-  z-index: 3;
+  padding: 28px 48px;
+  z-index: 10;
+  overflow-y: auto;
 }
-.overlay.hidden { display: none; }
 .overlay h1 {
-  margin: 0 0 6px;
-  font-size: 52px;
-  letter-spacing: 2px;
-  color: #ffb347;
-  text-shadow: 0 0 24px rgba(255, 179, 71, 0.45);
+  font-size: 64px;
+  margin: 0 0 4px;
+  color: #2ee6a8;
+  letter-spacing: 3px;
+  text-shadow: 0 0 24px rgba(46, 230, 168, 0.5);
 }
-.overlay .tagline { margin: 0 0 18px; color: #cfc6e8; font-size: 17px; }
-.overlay .rules { max-width: 560px; margin: 0 0 20px; font-size: 15px; line-height: 1.55; color: #e8e0f5; }
-.overlay .rules p { margin: 6px 0; }
-.overlay .rules b { color: #ffb347; }
-.overlay button {
-  font: inherit;
-  font-size: 19px;
-  font-weight: 700;
-  color: #241a3d;
-  background: #ffb347;
-  border: none;
-  border-radius: 10px;
-  padding: 12px 30px;
-  cursor: pointer;
-  box-shadow: 0 4px 0 #c77f1f;
-}
-.overlay button:active { transform: translateY(2px); box-shadow: 0 2px 0 #c77f1f; }
-.best-line { margin-top: 16px; color: #b9aed6; font-size: 15px; }
-.big-score { font-size: 30px; font-weight: 700; margin: 8px 0; color: #f2ead8; }
-.big-score span { color: #ffb347; }
-.new-best { color: #37c8ab; font-weight: 700; }
-.hint { color: #b9aed6; font-size: 14px; margin-top: 14px; }
-
-/* v2: objective banner (WIN/LOSE, always in play), wave banner (incoming
-   preview), boss bar, pollen/moon chips, pollen shop, judge note. */
-#objective-bar {
-  position: absolute;
-  top: 44px; left: 0; right: 0;
-  text-align: center;
-  font-size: 13px;
-  color: #ffe9a8;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
-  z-index: 2;
-}
-#wave-banner {
-  position: absolute;
-  top: 150px; left: 0; right: 0;
-  text-align: center;
-  pointer-events: none;
-  z-index: 2;
-}
-#wave-banner.hidden, #boss-bar.hidden { display: none; }
-#wave-text {
-  display: inline-block;
-  font-size: 16px; font-weight: 700;
-  color: #241a3d;
-  background: rgba(255, 179, 71, 0.92);
-  border-radius: 8px;
-  padding: 8px 16px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
-}
-#boss-bar {
-  position: absolute;
-  top: 76px; left: 50%;
-  transform: translateX(-50%);
-  display: flex; align-items: center; gap: 10px;
-  background: rgba(46, 16, 64, 0.85);
-  border: 1px solid rgba(255, 46, 46, 0.6);
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 15px;
-  z-index: 2;
-  pointer-events: none;
-}
-#boss-name { color: #ff5d5d; font-weight: 700; letter-spacing: 1px; }
-#boss-hits { color: #ff2e2e; font-size: 17px; letter-spacing: 2px; }
-.boss-hint { color: #cfc6e8; font-size: 12px; }
-.pollen-bank { color: #ffe9a8; font-weight: 700; }
-.moon-chip { color: #f6ead2; font-weight: 700; }
+.overlay h2 { font-size: 20px; margin: 16px 0 8px; color: #b06cff; letter-spacing: 2px; }
+.overlay h2 .sub { color: #9fd8b8; font-size: 13px; letter-spacing: 0; }
+.tagline { font-size: 19px; color: #c8ffe9; margin: 0 0 12px; font-style: italic; }
+.hint { font-size: 14px; color: #9fd8b8; margin: 10px 0 0; }
 .judge-note {
-  margin-top: 18px;
-  max-width: 560px;
-  color: #8f86ad;
-  font-size: 12px;
+  font-size: 13px;
+  color: #8fb8a2;
+  max-width: 900px;
+  margin: 14px 0 0;
   line-height: 1.5;
 }
-#shop { margin: 6px 0 18px; width: 100%; max-width: 640px; }
-#shop h2 {
-  margin: 0 0 10px;
-  font-size: 19px;
-  color: #ffe9a8;
-  letter-spacing: 1px;
+.feats-line { font-size: 16px; color: #ffd23d; margin: 10px 0; }
+.goal { color: #2ee6a8; }
+.win { color: #ffd23d; }
+.lose { color: #ff5df2; }
+
+.title-grid {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+  max-width: 1060px;
+  text-align: left;
 }
-.shop-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+.title-col {
+  flex: 1;
+  background: rgba(26, 58, 44, 0.5);
+  border: 1px solid rgba(46, 230, 168, 0.35);
+  border-radius: 10px;
+  padding: 12px 18px;
 }
-/* More specific than `.overlay button` (amber), so the shop keeps its own look. */
-.overlay .shop-btn {
+.title-col h2 { margin-top: 0; }
+.title-col p { margin: 6px 0; font-size: 15px; line-height: 1.45; }
+.title-col b { color: #7dffce; }
+
+.tide-title { margin-top: 18px; }
+.tide-row { display: flex; gap: 12px; width: 100%; max-width: 1060px; }
+.tide-btn {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  font-size: 14px;
-  font-weight: 400;
+  gap: 4px;
+  padding: 12px 14px;
+  font-size: 15px;
   text-align: left;
-  color: #f2ead8;
-  background: rgba(20, 12, 40, 0.92);
-  border: 1px solid rgba(255, 179, 71, 0.45);
-  border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  box-shadow: none;
-  transform: none;
+  background: rgba(26, 58, 44, 0.6);
 }
-.overlay .shop-btn b { color: #ffb347; font-size: 15px; }
-.overlay .shop-btn span { color: #cfc6e8; font-size: 13px; }
-.overlay .shop-btn .shop-state { color: #37c8ab; font-weight: 700; }
-.overlay .shop-btn.owned { border-color: #37c8ab; opacity: 0.75; }
-.overlay .shop-btn.owned .shop-state { color: #37c8ab; }
-.overlay .shop-btn.poor { opacity: 0.6; }
-.overlay .shop-btn.poor .shop-state { color: #ff7d7d; }
-.shop-hint { color: #b9aed6; font-size: 13px; margin: 8px 0 0; }
+.tide-btn span { font-size: 13px; color: #9fd8b8; }
+.tide-btn.selected { border-color: #ffd23d; background: rgba(255, 210, 61, 0.15); }
+.tide-btn .tide-best { color: #ffd23d; font-size: 12px; }
+
+#start-btn { font-size: 26px; padding: 14px 64px; margin-top: 14px; }
+
+/* ---------- Draft ---------- */
+.draft-stats { font-size: 16px; color: #ffd23d; margin: 4px 0; }
+.draft-row { display: flex; gap: 14px; margin-top: 8px; }
+.draft-card {
+  width: 250px;
+  padding: 16px;
+  text-align: left;
+  background: rgba(26, 58, 44, 0.7);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.draft-card .rarity { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #9fd8b8; }
+.draft-card.rarity-rare .rarity { color: #7db8ff; }
+.draft-card.rarity-epic .rarity { color: #ffd23d; }
+.draft-card .relic-name { font-size: 20px; font-weight: 700; color: #eaf7ee; }
+.draft-card .relic-desc { font-size: 15px; color: #c8ffe9; line-height: 1.4; }
+.draft-card .relic-key { font-size: 12px; color: #9fd8b8; }
+.draft-card:hover { border-color: #ffd23d; }
+.draft-hint { font-size: 14px; color: #9fd8b8; margin: 10px 0 0; }
+.draft-foot {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 14px;
+  font-size: 14px;
+}
+.draft-foot b { display: block; color: #2ee6a8; font-size: 12px; letter-spacing: 2px; }
+.draft-next, .draft-build { text-align: left; max-width: 320px; }
+#draft-reroll { font-size: 16px; padding: 10px 18px; }
+#draft-continue { font-size: 22px; padding: 12px 44px; margin-top: 16px; }
+
+/* ---------- Victory ---------- */
+#screen-victory h1 { color: #ffd23d; text-shadow: 0 0 24px rgba(255, 210, 61, 0.5); }
+.victory-top { display: flex; gap: 24px; align-items: stretch; margin-top: 8px; }
+.grade-box, .victory-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
+  background: rgba(26, 58, 44, 0.6);
+  border: 1px solid rgba(255, 210, 61, 0.5);
+  border-radius: 12px;
+}
+.grade-label { font-size: 13px; letter-spacing: 3px; color: #9fd8b8; }
+#victory-grade { font-size: 72px; font-weight: 700; color: #ffd23d; line-height: 1; }
+.grade-sub { font-size: 14px; color: #c8ffe9; margin-top: 4px; }
+#victory-score { font-size: 52px; font-weight: 700; color: #ffd23d; line-height: 1.05; }
+.new-best { color: #ffd23d; font-weight: 700; margin-top: 4px; }
+.victory-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: center;
+  margin: 14px 0 4px;
+  font-size: 15px;
+  color: #eaf7ee;
+}
+.victory-stats b { color: #2ee6a8; }
+#victory-chart {
+  margin-top: 10px;
+  background: rgba(5, 20, 12, 0.6);
+  border: 1px solid rgba(46, 230, 168, 0.35);
+  border-radius: 8px;
+}
+.chart-label { font-size: 12px; color: #9fd8b8; margin: 6px 0 0; }
+.runs-line { font-size: 14px; color: #c8ffe9; margin: 8px 0 0; }
+.next-goal { font-size: 16px; color: #ff5df2; margin: 8px 0 0; font-weight: 700; }
+.victory-btns { display: flex; gap: 12px; margin-top: 16px; }
+.victory-btns button { font-size: 18px; }
+
+/* ---------- Game over ---------- */
+#screen-over h1 { color: #ff5df2; text-shadow: 0 0 24px rgba(255, 93, 242, 0.5); }
+.big-score { font-size: 32px; margin: 8px 0 0; }
+.big-score span { color: #ffd23d; font-weight: 700; }
+.best-line { font-size: 18px; margin: 4px 0 0; }
+.over-stats { font-size: 16px; color: #c8ffe9; margin: 12px 0; }
+#again-btn { font-size: 22px; margin-top: 8px; }

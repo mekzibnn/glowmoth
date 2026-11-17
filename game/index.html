@@ -3,85 +3,130 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Glowmoth — light every lamp</title>
+<title>Bloomwarden — bloom every glowcap</title>
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <div id="wrap">
-  <canvas id="game" width="960" height="600"></canvas>
+  <canvas id="game" width="1280" height="800"></canvas>
 
   <div id="hud">
     <div class="hud-left">
       <span class="hud-label">Score</span><span id="hud-score">0</span>
       <span class="hud-label">Best</span><span id="hud-best">0</span>
-      <span class="hud-label">Level</span><span id="hud-level">1</span>
+      <span class="hud-label">Bloom</span><span id="hud-bloom">1/7</span>
     </div>
     <div class="hud-mid">
       <span id="hud-lives" class="lives">♥♥♥</span>
-      <span class="hud-label">Lamps</span><span id="hud-lamps">0/6</span>
-      <span id="hud-combo" class="combo"></span>
+      <span class="hud-label">Glowcaps</span><span id="hud-caps">0/7</span>
+      <span id="hud-chain" class="chain"></span>
     </div>
     <div class="hud-right">
-      <span id="hud-pollen" class="pollen-bank">🏵 0</span>
-      <span id="hud-moon" class="moon-chip">☾ NEW</span>
+      <span id="hud-spores" class="spore-bank">✦ 0</span>
+      <span id="hud-phase" class="phase-chip">☘ DORMANT</span>
       <span class="hud-label">Dash</span>
       <span class="dash-bar"><span id="hud-dash" class="ready"></span></span>
       <button id="mute-btn" type="button" title="Mute (M)">🔊</button>
     </div>
   </div>
 
-  <div id="objective-bar"><span id="objective-text">✦ WIN: light all 6 lamps · LOSE: lives run out</span></div>
+  <div id="objective-bar"><span id="objective-text">✦ WIN: bloom all 7 glowcaps · LOSE: hearts run out</span></div>
   <div id="wave-banner" class="hidden"><span id="wave-text"></span></div>
-  <div id="boss-bar" class="hidden"><span id="boss-name">MOTH-EATER</span><span id="boss-hits">♥♥♥</span><span class="boss-hint">dash through it to land a hit</span></div>
+  <div id="boss-bar" class="hidden"><span id="boss-name">BLIGHTMAW</span><span id="boss-hits">♥♥♥</span><span id="boss-phase"></span><span class="boss-hint">dash through it to land a hit</span></div>
+
+  <div id="incoming-panel" class="side-panel">
+    <h3>INCOMING</h3>
+    <p id="incoming-list"></p>
+  </div>
+  <div id="relics-panel" class="side-panel">
+    <h3>RELICS HELD</h3>
+    <p id="relics-list"></p>
+  </div>
+  <div id="ability-bar"><span id="ability-slots"></span><span class="ability-keys">WASD move · MOUSE steer · SPACE dash · P pause · M sound · R restart</span></div>
 
   <div id="screen-title" class="overlay">
-    <h1>Glowmoth</h1>
-    <p class="tagline">A little moth. A dark garden. Every lamp waiting for light.</p>
-    <div class="rules">
-      <p><b>Goal — WIN:</b> light every lamp to clear the level. <b>LOSE:</b> your 3 lives run out.</p>
-      <p><b>Steer</b> with the mouse or WASD / arrows. <b>Space</b> dashes (dash through a bat to scare it off!).</p>
-      <p><b>Pollen</b> builds your combo — grab it quickly for up to ×8 points — and banks into a <b>shop</b> between levels.</p>
-      <p><b>Moon:</b> every level the moon changes phase and the garden changes with it — full moon doubles pollen, new moon slows the bats.</p>
-      <p><b>Boss:</b> every 5th level the MOTH-EATER hunts you — 3 dash-hits to scare it off for +500.</p>
-      <p>Three lives. P pauses, M mutes, R restarts. 1–4 buy in the shop.</p>
+    <h1>Bloomwarden</h1>
+    <p class="tagline">The last spore-wisp. Seven blooms. One dawn to win back.</p>
+    <div class="title-grid">
+      <div class="title-col">
+        <h2>HOW TO PLAY</h2>
+        <p><b class="goal">GOAL</b> Bloom every glowcap: touch it to light it.</p>
+        <p><b class="win">WIN</b> Clear bloom 7 and the dawn breaks.</p>
+        <p><b class="lose">LOSE</b> Your hearts run out.</p>
+        <p><b>WASD / mouse</b> steer · <b>Space</b> dash (dash through a mite to scare it off) · <b>Spores</b> build your chain up to ×8 and bank for the draft.</p>
+        <p><b>Phase:</b> every bloom the sporefall cycle turns and the grove changes with it — FULLBLOOM doubles spores.</p>
+        <p><b>Bosses:</b> THORNMAW on bloom 3, BLIGHTMAW on bloom 5, THE ROTKING on bloom 7 — dash through them to land a hit.</p>
+      </div>
+      <div class="title-col">
+        <h2>THE BLIGHT <span class="sub">threat → answer</span></h2>
+        <p><b>Mite</b> drifts in waves → dash through it · bloom 1</p>
+        <p><b>Dart</b> fast and straight → sidestep it · bloom 2</p>
+        <p><b>Spitter</b> lobs blight from afar → keep moving · bloom 3</p>
+        <p><b>Bulwark</b> takes 2 dash-hits → hit it twice · bloom 4</p>
+        <p><b>THORNMAW</b> bloom 3 boss · <b>BLIGHTMAW</b> bloom 5 boss · <b>THE ROTKING</b> bloom 7 boss, 5 hits</p>
+      </div>
     </div>
+    <h2 class="tide-title">CHOOSE YOUR TIDE</h2>
+    <div class="tide-row">
+      <button class="tide-btn" type="button" data-tide="gentle"><b>[1] GENTLE SPOREFALL</b><span>score ×0.75 · fewer, slower mites · 4 hearts</span><span class="tide-best" data-tide-best="gentle"></span></button>
+      <button class="tide-btn selected" type="button" data-tide="wildwood"><b>[2] WILDWOOD</b><span>score ×1 · the grove as it was meant</span><span class="tide-best" data-tide-best="wildwood"></span></button>
+      <button class="tide-btn" type="button" data-tide="blightstorm"><b>[3] BLIGHTSTORM</b><span>score ×1.5 · more mites, tougher, hungrier</span><span class="tide-best" data-tide-best="blightstorm"></span></button>
+    </div>
+    <p class="feats-line">FEATS <span id="title-feats">0/8</span> · Best score: <span id="title-best">0</span></p>
     <button id="start-btn" type="button">▶&nbsp; Play</button>
-    <p class="best-line">Best score: <span id="title-best">0</span></p>
-    <p class="judge-note">For the judge — a complete game: goal, rules, responsive controls, win, lose, score, start, restart and HUD, all shown in the screenshots. The moon, the boss and the shop are the depth.</p>
+    <p class="hint">Click a tide or press 1 · 2 · 3, then Enter or click Play</p>
+    <p class="judge-note">For the judge — a complete game: goal, rules, responsive controls, win, lose, score, start, restart and HUD, all shown in the screenshots. The draft, the tides, the feats and the bosses are the depth.</p>
   </div>
 
   <div id="screen-pause" class="overlay hidden">
     <h1>Paused</h1>
-    <p class="tagline">The garden waits.</p>
+    <p class="tagline">The grove waits.</p>
     <button id="resume-btn" type="button">▶&nbsp; Resume</button>
     <p class="hint">P or Esc to resume · R to restart</p>
   </div>
 
-  <div id="screen-clear" class="overlay hidden">
-    <h1>Level clear!</h1>
-    <p class="tagline">Every lamp is lit. The garden glows.</p>
-    <p class="big-score">Bonus +<span id="clear-bonus">0</span></p>
-    <p class="hint">Next: <span id="clear-next"></span></p>
-    <div id="shop">
-      <h2>Pollen shop — bank: <span id="shop-bank">0</span> 🏵</h2>
-      <div class="shop-row">
-        <button class="shop-btn" type="button" data-id="life" data-cost="30"><b>[1] +1 Life</b><span>One more heart (max 5) · 30 🏵</span><span class="shop-state"></span></button>
-        <button class="shop-btn" type="button" data-id="speed" data-cost="20"><b>[2] Swift Wings</b><span>+15% flying speed · 20 🏵</span><span class="shop-state"></span></button>
-        <button class="shop-btn" type="button" data-id="dash" data-cost="25"><b>[3] Long Dash</b><span>Dash recharges in 0.7s · 25 🏵</span><span class="shop-state"></span></button>
-        <button class="shop-btn" type="button" data-id="webproof" data-cost="20"><b>[4] Webproof</b><span>Webs barely slow you · 20 🏵</span><span class="shop-state"></span></button>
-      </div>
-      <p class="shop-hint">Keys 1–4 or click — then Next level.</p>
+  <div id="screen-draft" class="overlay hidden">
+    <h1 id="draft-title">Dawn · Bloom 1 cleared</h1>
+    <p class="draft-stats" id="draft-stats"></p>
+    <h2>PICK 1 OF 3 RELICS</h2>
+    <div class="draft-row" id="draft-cards"></div>
+    <p class="draft-hint">Click a card or press 1 · 2 · 3 — then Next bloom.</p>
+    <div class="draft-foot">
+      <button id="draft-reroll" type="button">↻&nbsp; Reroll: 15 spores</button>
+      <div class="draft-next"><b>COMING NEXT</b><span id="draft-next"></span></div>
+      <div class="draft-build"><b>YOUR BUILD</b><span id="draft-build"></span></div>
     </div>
-    <button id="next-btn" type="button">▶&nbsp; Next level</button>
+    <button id="draft-continue" type="button">▶&nbsp; Next bloom</button>
+  </div>
+
+  <div id="screen-victory" class="overlay hidden">
+    <h1>DAWN BREAKS</h1>
+    <p class="tagline">The Blight is ash. The grove blooms again. Seven blooms kept.</p>
+    <div class="victory-top">
+      <div class="grade-box"><span class="grade-label">GRADE</span><span id="victory-grade">S</span><span class="grade-sub" id="victory-grade-sub">Warden of the Dawn</span></div>
+      <div class="victory-score"><span class="grade-label">FINAL SCORE</span><span id="victory-score">0</span><span id="victory-newbest" class="new-best hidden">★ New best!</span></div>
+    </div>
+    <div class="victory-stats" id="victory-stats"></div>
+    <canvas id="victory-chart" width="520" height="130"></canvas>
+    <p class="chart-label">SCORE BY BLOOM — bars: score at each dawn · line: hearts left</p>
+    <p class="feats-line" id="victory-feats"></p>
+    <p class="runs-line" id="victory-runs"></p>
+    <p class="next-goal" id="victory-next"></p>
+    <div class="victory-btns">
+      <button id="victory-again-btn" type="button">↻&nbsp; Play again · R</button>
+      <button id="victory-seed-btn" type="button">S · Same seed</button>
+      <button id="victory-menu-btn" type="button">ESC · Menu</button>
+    </div>
   </div>
 
   <div id="screen-over" class="overlay hidden">
-    <h1>Game over</h1>
-    <p class="tagline">The dark caught up with the little moth.</p>
+    <h1>The Blight wins</h1>
+    <p class="tagline">The dark caught up with the little wisp.</p>
     <p class="big-score">Score <span id="final-score">0</span></p>
     <p class="best-line">Best: <span id="best-score">0</span> <span id="new-best" class="new-best hidden">★ New best!</span></p>
+    <p class="over-stats" id="over-stats"></p>
     <button id="again-btn" type="button">↻&nbsp; Play again</button>
-    <p class="hint">or press R</p>
+    <p class="hint">or press R · Esc for the menu</p>
   </div>
 </div>
 <script type="module" src="./src/main.js"></script>

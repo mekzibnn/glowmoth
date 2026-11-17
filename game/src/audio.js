@@ -109,8 +109,8 @@ export const sfx = {
     const base = 620 * Math.pow(1.059, Math.min(combo, 12));
     blip(base, base * 1.5, 0.14, 'sine', 0.16);
   },
-  // Lighting a lamp: a warm little arpeggio.
-  lamp() {
+  // Blooming a glowcap: a warm little arpeggio.
+  bloom() {
     blip(523.25, 523.25, 0.12, 'triangle', 0.18);
     blip(659.25, 659.25, 0.12, 'triangle', 0.18, 0.07);
     blip(783.99, 783.99, 0.2, 'triangle', 0.18, 0.14);
@@ -124,7 +124,7 @@ export const sfx = {
   dash() {
     noiseBurst(0.16, 0.14, 1400);
   },
-  // Scaring a bat off with a dash: a bright chirp.
+  // Scaring a mite off with a dash: a bright chirp.
   scare() {
     blip(880, 1560, 0.12, 'square', 0.08);
   },
@@ -146,10 +146,14 @@ export const sfx = {
     blip(140, 60, 0.2, 'sawtooth', 0.22);
     noiseBurst(0.12, 0.14, 500);
   },
-  // Buying in the shop: a bright coin.
-  buy() {
+  // Picking a relic in the draft: a bright coin.
+  draft() {
     blip(988, 988, 0.09, 'sine', 0.16);
     blip(1319, 1319, 0.14, 'sine', 0.16, 0.08);
+  },
+  // Winning the campaign (the dawn breaks): a full rising fanfare.
+  win() {
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => blip(f, f, 0.22, 'triangle', 0.18, i * 0.11));
   },
   // Button / start blip.
   ui() {
